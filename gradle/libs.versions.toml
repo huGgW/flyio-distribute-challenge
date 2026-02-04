@@ -3,6 +3,8 @@
 
 [versions]
 kotlin-gradle-plugin = "2.3.0"
+kotlin-serialization-plugin = "2.3.0"
 
 [libraries]
 kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin-gradle-plugin" }
+kotlin-serialization-plugin = { module = "org.jetbrains.kotlin:kotlin-serialization", version.ref = "kotlin-serialization-plugin" }
