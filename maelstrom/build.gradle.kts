@@ -6,7 +6,7 @@ plugins {
     alias(libs.plugins.kotlin)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ktlint)
-    application
+    `java-library`
 }
 
 repositories {
@@ -14,8 +14,6 @@ repositories {
 }
 
 dependencies {
-    implementation(project(":maelstrom"))
-
     implementation(libs.kotlin.serializationx.json)
 
     testImplementation("org.junit.jupiter:junit-jupiter:5.12.1")
@@ -30,10 +28,6 @@ java {
 
 kotlin {
     jvmToolchain(25)
-}
-
-application {
-    mainClass = "win.huggw.app.AppKt"
 }
 
 tasks.named<Test>("test") {

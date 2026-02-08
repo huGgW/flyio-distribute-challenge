@@ -11,4 +11,4 @@ plugins {
 }
 
 rootProject.name = "flyio-distributed-challenge"
-include("app", "maelstrom-node")
+include("app", "maelstrom")

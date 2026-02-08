@@ -1,10 +1,10 @@
-package win.huggw.maelstrom_node
+package win.huggw.maelstrom
 
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNamingStrategy
 
-class Node internal constructor (
+class Node internal constructor(
     val handler: Map<MessageType, Handler>,
     val json: Json,
 ) {
@@ -13,14 +13,15 @@ class Node internal constructor (
     }
 }
 
-class NodeBuilder internal constructor () {
+class NodeBuilder internal constructor() {
     private val handlers = mutableMapOf<MessageType, Handler>()
 
     @OptIn(ExperimentalSerializationApi::class)
-    var json: Json = Json {
-        namingStrategy = JsonNamingStrategy.SnakeCase
-        ignoreUnknownKeys = true
-    }
+    var json: Json =
+        Json {
+            namingStrategy = JsonNamingStrategy.SnakeCase
+            ignoreUnknownKeys = true
+        }
 
     fun handle(adderAction: HandlerInfoAdder.() -> Unit) {
         val adder = HandlerInfoAdder()
