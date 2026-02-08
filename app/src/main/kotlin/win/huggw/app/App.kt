@@ -1,8 +1,8 @@
 package win.huggw.app
 
-import win.huggw.maelstrom_server.Server
+import win.huggw.maelstrom_node.Node
 
 fun main() {
-    val server = Server {}
-    server.listen()
+    val node = Node{}
+    node.listen()
 }

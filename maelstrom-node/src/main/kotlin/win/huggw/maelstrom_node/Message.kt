@@ -1,4 +1,4 @@
-package win.huggw.maelstrom_server
+package win.huggw.maelstrom_node
 
 import kotlinx.serialization.Serializable
 

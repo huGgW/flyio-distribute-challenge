@@ -1,10 +1,10 @@
-package win.huggw.maelstrom_server
+package win.huggw.maelstrom_node
 
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNamingStrategy
 
-class Server internal constructor (
+class Node internal constructor (
     val handler: Map<MessageType, Handler>,
     val json: Json,
 ) {
@@ -13,7 +13,7 @@ class Server internal constructor (
     }
 }
 
-class ServerBuilder internal constructor () {
+class NodeBuilder internal constructor () {
     private val handlers = mutableMapOf<MessageType, Handler>()
 
     @OptIn(ExperimentalSerializationApi::class)
@@ -38,11 +38,11 @@ class ServerBuilder internal constructor () {
         }
     }
 
-    fun build() = Server(handlers, json)
+    fun build() = Node(handlers, json)
 }
 
-fun Server(builderAction: ServerBuilder.() -> Unit): Server {
-    val builder = ServerBuilder()
+fun Node(builderAction: NodeBuilder.() -> Unit): Node {
+    val builder = NodeBuilder()
     builder.builderAction()
     return builder.build()
 }

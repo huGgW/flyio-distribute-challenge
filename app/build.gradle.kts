@@ -8,7 +8,7 @@ plugins {
 
 dependencies {
     implementation("org.apache.commons:commons-text")
-    implementation(project(":maelstrom-server"))
+    implementation(project(":maelstrom-node"))
 }
 
 application {
