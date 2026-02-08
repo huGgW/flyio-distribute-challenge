@@ -1,6 +1,6 @@
 package win.huggw.maelstrom
 
 interface Handler {
-    @Throws(Exception::class)
+    @Throws(Error::class)
     fun handle(message: Message)
 }
