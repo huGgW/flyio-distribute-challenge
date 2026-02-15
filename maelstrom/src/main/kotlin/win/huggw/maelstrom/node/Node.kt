@@ -15,10 +15,13 @@ import win.huggw.maelstrom.init.INIT_MESSAGE_TYPE
 import win.huggw.maelstrom.message.*
 import java.io.BufferedReader
 import java.io.BufferedWriter
-import java.util.concurrent.atomic.AtomicInteger
-import java.util.concurrent.atomic.AtomicReference
+import kotlin.concurrent.atomics.AtomicInt
+import kotlin.concurrent.atomics.AtomicReference
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import kotlin.concurrent.atomics.fetchAndIncrement
 import kotlin.reflect.KClass
 
+@OptIn(ExperimentalAtomicApi::class)
 class Node internal constructor(
     internal val handlers: Map<MessageType, GeneralHandler>,
     internal val json: Json,
@@ -27,7 +30,9 @@ class Node internal constructor(
     private val logger: BufferedWriter = System.err.bufferedWriter(),
 ) {
     private val id: AtomicReference<String?> = AtomicReference(null)
-    private val latestMsgId = AtomicInteger(0)
+    private val nodeIds = AtomicReference<Set<String>?>(null)
+    private val latestMsgId = AtomicInt(0)
+
     private val messageReceiveChan = Channel<String>()
     private val messageSendChan = Channel<String>()
 
@@ -47,7 +52,7 @@ class Node internal constructor(
                         .onFailure {log("Invalid message format: $line") } // TODO: make error pushable
                         .getOrNull() ?: return@launch
 
-                    if (messageType != INIT_MESSAGE_TYPE && id.get() == null) {
+                    if (messageType != INIT_MESSAGE_TYPE && id.load() == null) {
                         pushError(
                             TemporarilyUnavailableError(
                                 text = "Node not initialized.",
@@ -178,18 +183,27 @@ class Node internal constructor(
         logger.flush()
     }
 
-    private fun nextMessageId() = latestMsgId.getAndAdd(1)
+    private fun nextMessageId() = latestMsgId.fetchAndIncrement()
 
     internal fun context() = let {
-        object: InternalNodeContext {
+        object: InitNodeContext {
+            override val id: String
+                get() = it.id.load() ?: error("Node not initialized.")
+
             override fun setId(id: String) {
                 if (!it.id.compareAndSet(null, id)) {
                     error("Node ID already set.")
                 }
             }
 
-            override val id: String
-                get() = it.id.get() ?: error("Node not initialized.")
+            override val nodeIds: Set<String>
+                get() = it.nodeIds.load() ?: error("Node IDs not initialized.")
+
+            override fun setNodeIds(nodeIds: Set<String>) {
+                if (!it.nodeIds.compareAndSet(null, nodeIds)) {
+                    error("Node IDs already set.")
+                }
+            }
 
             override fun nextMessageId() = it.nextMessageId()
 
