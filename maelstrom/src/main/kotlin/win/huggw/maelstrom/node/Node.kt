@@ -159,7 +159,7 @@ class Node internal constructor(
             }
         }
 
-        val errorBody = error.toErrorMessageBody(nextMessageId())
+        val errorBody = error.toErrorMessageBody()
         val errorMessage = rawMessage.replyTo(json.encodeToJsonElement(errorBody))
 
         val line = json.encodeToString(errorMessage)
