@@ -13,6 +13,11 @@ import kotlin.reflect.KClass
 class NodeBuilder internal constructor() {
     internal val handlers = mutableMapOf<MessageType, GeneralHandler>()
 
+    init {
+        // add init handler
+        addHandler(InitHandler())
+    }
+
     @OptIn(ExperimentalSerializationApi::class)
     var json: Json =
         Json {
