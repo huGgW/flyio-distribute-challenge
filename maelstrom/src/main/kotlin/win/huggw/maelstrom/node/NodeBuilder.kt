@@ -23,6 +23,7 @@ class NodeBuilder internal constructor() {
         Json {
             namingStrategy = JsonNamingStrategy.SnakeCase
             ignoreUnknownKeys = true
+            encodeDefaults = true
         }
 
     inline fun <reified B : Body> addHandler(handler: Handler<B>) {
