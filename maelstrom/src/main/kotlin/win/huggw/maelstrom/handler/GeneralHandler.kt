@@ -7,7 +7,6 @@ import win.huggw.maelstrom.message.Body
 import win.huggw.maelstrom.message.Message
 import win.huggw.maelstrom.message.RawMessage
 import win.huggw.maelstrom.node.InternalNodeContext
-import win.huggw.maelstrom.node.Node
 import kotlin.reflect.KClass
 import kotlin.reflect.cast
 
@@ -34,7 +33,7 @@ internal class GeneralHandler(
 
         require(body.type == messageType)
 
-        val message = Message(rawMessage.src, rawMessage.dst, body)
+        val message = Message(rawMessage.src, rawMessage.dest, body)
 
         @Suppress("UNCHECKED_CAST")
         (handler as Handler<Body>).handle(ctx, message)

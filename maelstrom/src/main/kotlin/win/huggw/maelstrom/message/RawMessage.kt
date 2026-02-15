@@ -6,13 +6,13 @@ import kotlinx.serialization.json.JsonElement
 @Serializable
 internal class RawMessage(
     val src: String,
-    val dst: String,
+    val dest: String,
     val body: JsonElement,
 ) {
     fun replyTo(replyBody: JsonElement) =
         RawMessage(
-            src = dst,
-            dst = src,
+            src = dest,
+            dest = src,
             body = replyBody,
         )
 }
