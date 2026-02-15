@@ -1,6 +1,6 @@
 package win.huggw.app
 
-import win.huggw.maelstrom.Node
+import win.huggw.maelstrom.node.Node
 
 suspend fun main() {
     val node = Node {}

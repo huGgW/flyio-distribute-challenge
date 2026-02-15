@@ -1,10 +1,11 @@
-package win.huggw.maelstrom
+package win.huggw.maelstrom.node
 
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNamingStrategy
 import win.huggw.maelstrom.handler.GeneralHandler
 import win.huggw.maelstrom.handler.Handler
+import win.huggw.maelstrom.init.InitHandler
 import win.huggw.maelstrom.message.Body
 import win.huggw.maelstrom.message.MessageType
 import kotlin.reflect.KClass

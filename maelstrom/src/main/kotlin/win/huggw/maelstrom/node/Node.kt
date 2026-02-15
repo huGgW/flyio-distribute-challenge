@@ -1,32 +1,38 @@
-package win.huggw.maelstrom
+package win.huggw.maelstrom.node
 
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ClosedSendChannelException
-import kotlinx.coroutines.channels.ReceiveChannel
-import kotlinx.coroutines.channels.SendChannel
+import kotlinx.serialization.InternalSerializationApi
 import kotlinx.serialization.json.*
+import kotlinx.serialization.serializer
 import win.huggw.maelstrom.error.CrashError
 import win.huggw.maelstrom.error.MaelstromError
-import win.huggw.maelstrom.error.MalformedRequestError
 import win.huggw.maelstrom.error.NotSupportedError
+import win.huggw.maelstrom.error.TemporarilyUnavailableError
 import win.huggw.maelstrom.handler.GeneralHandler
+import win.huggw.maelstrom.init.INIT_MESSAGE_TYPE
 import win.huggw.maelstrom.message.*
+import java.io.BufferedReader
+import java.io.BufferedWriter
+import java.util.concurrent.atomic.AtomicReference
+import kotlin.reflect.KClass
 
 class Node internal constructor(
     internal val handlers: Map<MessageType, GeneralHandler>,
     internal val json: Json,
+    private val reader: BufferedReader = System.`in`.bufferedReader(),
+    private val writer: BufferedWriter = System.out.bufferedWriter(),
+    private val logger: BufferedWriter = System.err.bufferedWriter(),
 ) {
-    private val reader = System.`in`.bufferedReader()
-    private val writer = System.out.bufferedWriter()
-    private val logger = System.err.bufferedWriter()
+    private val id: AtomicReference<String?> = AtomicReference(null)
+    private val messageReceiveChan = Channel<String>()
+    private val messageSendChan = Channel<String>()
 
     suspend fun listen() = coroutineScope {
-        val messageReceiveChan = Channel<String>()
-        val messageSendChan = Channel<String>()
 
-        val receiveMessageJob = launch { receiveMessageLoop(messageReceiveChan) }
-        val sendMessageJob = launch { sendMessageLoop(messageSendChan) }
+        val receiveMessageJob = launch { receiveMessageLoop() }
+        val sendMessageJob = launch { sendMessageLoop() }
 
         val handlerJobs = mutableListOf<Job>()
         while (true) {
@@ -41,22 +47,31 @@ class Node internal constructor(
                         log("Invalid message format: $line")
                     }.getOrNull() ?: return@launch
 
+                    if (messageType != INIT_MESSAGE_TYPE && id.get() == null) {
+                        pushError(
+                            TemporarilyUnavailableError(
+                                text = "Node not initialized.",
+                            ),
+                            rawMessage,
+                        )
+                        return@launch
+                    }
+
                     val handler =
                         handlers[messageType]
                             ?: let {
                                 pushError(
                                     NotSupportedError("Message type $messageType is not supported."),
                                     rawMessage,
-                                    messageSendChan,
                                 )
                                 return@launch
                             }
 
                     runCatching {
-                        handler.handle(rawMessage, json)
+                        handler.handle(context(), rawMessage, json)
                     }.onFailure {
                         when (it) {
-                            is MaelstromError -> pushError(it, rawMessage, messageSendChan)
+                            is MaelstromError -> pushError(it, rawMessage)
                             else -> {
                                 log("Handling Internal Error: ${rawMessage to it}")
                                 pushError(
@@ -64,7 +79,6 @@ class Node internal constructor(
                                         text = "Unexpected error: ${it.message}"
                                     ),
                                     rawMessage,
-                                    messageSendChan,
                                 )
                             }
                         }
@@ -79,7 +93,7 @@ class Node internal constructor(
         }.joinAll()
     }
 
-    private suspend fun receiveMessageLoop(messageReceiveChan: SendChannel<String>) = withContext(Dispatchers.IO) {
+    private suspend fun receiveMessageLoop() = withContext(Dispatchers.IO) {
         while (true) {
             val line = reader.readLine() ?: break
 
@@ -93,7 +107,7 @@ class Node internal constructor(
         }
     }
 
-    private suspend fun sendMessageLoop(messageSendChan: ReceiveChannel<String>) = withContext(Dispatchers.IO) {
+    private suspend fun sendMessageLoop() = withContext(Dispatchers.IO) {
         for (line in messageSendChan) {
             writer.write(line + "\n")
             writer.flush()
@@ -109,11 +123,12 @@ class Node internal constructor(
         return messageType to rawMessage
     }
 
-    private suspend inline fun <reified B : Body> pushMessage(
+    @OptIn(InternalSerializationApi::class)
+    private suspend fun <B: Body> pushMessage(
         message: Message<B>,
-        sendChan: SendChannel<String>,
+        bodyClass: KClass<B>,
     ) {
-        val rawBody = json.encodeToJsonElement(message.body)
+        val rawBody = json.encodeToJsonElement(bodyClass.serializer(), message.body)
         val rawMessage = RawMessage(
             src = message.dst,
             dst = message.src,
@@ -122,7 +137,7 @@ class Node internal constructor(
         val line = json.encodeToString(rawMessage)
 
         runCatching {
-            sendChan.send(line)
+            messageSendChan.send(line)
         }.onFailure {
             if (it !is ClosedSendChannelException) {
                 log("Internal Error: ${it.message}")
@@ -133,7 +148,6 @@ class Node internal constructor(
     private suspend fun pushError(
         error: MaelstromError,
         rawMessage: RawMessage,
-        sendChan: SendChannel<String>,
     ) {
         // try to extract msg id from raw message
         if (error.fromMsgId == null) {
@@ -150,7 +164,7 @@ class Node internal constructor(
         val line = json.encodeToString(errorMessage)
 
         runCatching {
-            sendChan.send(line)
+            messageSendChan.send(line)
         }.onFailure {
             if (it !is ClosedSendChannelException) {
                 log("Internal Error: ${it.message}")
@@ -161,5 +175,29 @@ class Node internal constructor(
     private suspend fun log(message: String) = withContext(Dispatchers.IO) {
         logger.write("$message\n")
         logger.flush()
+    }
+
+    internal fun context() = let {
+        object: InternalNodeContext {
+            override fun setId(id: String) {
+                if (!it.id.compareAndSet(null, id)) {
+                    error("Node ID already set.")
+                }
+            }
+
+            override val id: String
+                get() = it.id.get() ?: error("Node not initialized.")
+
+            override suspend fun <B: Body> push(message: Message<B>, bodyClass: KClass<B>) {
+                it.pushMessage(
+                    message,
+                    bodyClass,
+                )
+            }
+
+            override suspend fun log(message: String) {
+                it.log(message)
+            }
+        }
     }
 }
