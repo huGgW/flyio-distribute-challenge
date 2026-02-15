@@ -6,7 +6,9 @@ import kotlinx.coroutines.channels.ClosedSendChannelException
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.channels.SendChannel
 import kotlinx.serialization.json.*
+import win.huggw.maelstrom.error.CrashError
 import win.huggw.maelstrom.error.MaelstromError
+import win.huggw.maelstrom.error.MalformedRequestError
 import win.huggw.maelstrom.error.NotSupportedError
 import win.huggw.maelstrom.handler.GeneralHandler
 import win.huggw.maelstrom.message.*
@@ -20,25 +22,32 @@ class Node internal constructor(
     private val logger = System.err.bufferedWriter()
 
     suspend fun listen() = coroutineScope {
-        val messageReceiveChan = Channel<Pair<MessageType, RawMessage>>()
-        val messageSendChan = Channel<RawMessage>()
+        val messageReceiveChan = Channel<String>()
+        val messageSendChan = Channel<String>()
 
         val receiveMessageJob = launch { receiveMessageLoop(messageReceiveChan) }
         val sendMessageJob = launch { sendMessageLoop(messageSendChan) }
 
         val handlerJobs = mutableListOf<Job>()
         while (true) {
-            val (messageType, rawMessage) = messageReceiveChan.receiveCatching().getOrNull()
-                ?: break
+            val line = messageReceiveChan.receiveCatching().getOrNull() ?: break
 
             handlerJobs.add(
                 launch {
+                    val (messageType, rawMessage) = runCatching {
+                        parseMessage(line)
+                    }.onFailure {
+                        // TODO: make error pushable
+                        log("Invalid message format: $line")
+                    }.getOrNull() ?: return@launch
+
                     val handler =
                         handlers[messageType]
                             ?: let {
                                 pushError(
                                     NotSupportedError("Message type $messageType is not supported."),
                                     rawMessage,
+                                    messageSendChan,
                                 )
                                 return@launch
                             }
@@ -47,7 +56,17 @@ class Node internal constructor(
                         handler.handle(rawMessage, json)
                     }.onFailure {
                         when (it) {
-                            is MaelstromError -> pushError(it, rawMessage)
+                            is MaelstromError -> pushError(it, rawMessage, messageSendChan)
+                            else -> {
+                                log("Handling Internal Error: ${rawMessage to it}")
+                                pushError(
+                                    CrashError(
+                                        text = "Unexpected error: ${it.message}"
+                                    ),
+                                    rawMessage,
+                                    messageSendChan,
+                                )
+                            }
                         }
                     }
                 }
@@ -60,18 +79,12 @@ class Node internal constructor(
         }.joinAll()
     }
 
-    // TODO: seperate io and parse, and use concurrent parsing
-
-    private suspend fun receiveMessageLoop(messageReceiveChan: SendChannel<Pair<MessageType, RawMessage>>) {
+    private suspend fun receiveMessageLoop(messageReceiveChan: SendChannel<String>) = withContext(Dispatchers.IO) {
         while (true) {
-            val messagePair = runCatching {
-                receiveMessage()
-            }.onFailure {
-                log("Internal Error: ${it.message}")
-            }.getOrNull() ?: continue
+            val line = reader.readLine() ?: break
 
             runCatching {
-                messageReceiveChan.send(messagePair)
+                messageReceiveChan.send(line)
             }.onFailure {
                 if (it !is ClosedSendChannelException) {
                     log("Internal Error: ${it.message}")
@@ -80,21 +93,25 @@ class Node internal constructor(
         }
     }
 
-    private suspend fun receiveMessage(): Pair<MessageType, RawMessage>? =
-        withContext(Dispatchers.IO) {
-            val line = reader.readLine() ?: return@withContext null
-            val rawMessage = json.decodeFromString<RawMessage>(line)
-
-            val messageType =
-                checkNotNull(rawMessage.body.jsonObject["type"])
-                    .jsonPrimitive.content
-
-            messageType to rawMessage
+    private suspend fun sendMessageLoop(messageSendChan: ReceiveChannel<String>) = withContext(Dispatchers.IO) {
+        for (line in messageSendChan) {
+            writer.write(line + "\n")
+            writer.flush()
         }
+    }
+
+    private fun parseMessage(line: String): Pair<MessageType, RawMessage> {
+        val rawMessage = json.decodeFromString<RawMessage>(line)
+        val messageType =
+            checkNotNull(rawMessage.body.jsonObject["type"])
+                .jsonPrimitive.content
+
+        return messageType to rawMessage
+    }
 
     private suspend inline fun <reified B : Body> pushMessage(
         message: Message<B>,
-        sendChan: SendChannel<RawMessage>
+        sendChan: SendChannel<String>,
     ) {
         val rawBody = json.encodeToJsonElement(message.body)
         val rawMessage = RawMessage(
@@ -102,9 +119,10 @@ class Node internal constructor(
             dst = message.src,
             body = rawBody,
         )
+        val line = json.encodeToString(rawMessage)
 
         runCatching {
-            sendChan.send(rawMessage)
+            sendChan.send(line)
         }.onFailure {
             if (it !is ClosedSendChannelException) {
                 log("Internal Error: ${it.message}")
@@ -115,6 +133,7 @@ class Node internal constructor(
     private suspend fun pushError(
         error: MaelstromError,
         rawMessage: RawMessage,
+        sendChan: SendChannel<String>,
     ) {
         // try to extract msg id from raw message
         if (error.fromMsgId == null) {
@@ -128,24 +147,15 @@ class Node internal constructor(
         val errorBody = error.toErrorMessageBody()
         val errorMessage = rawMessage.replyTo(json.encodeToJsonElement(errorBody))
 
+        val line = json.encodeToString(errorMessage)
+
         runCatching {
-            sendMessage(errorMessage)
+            sendChan.send(line)
         }.onFailure {
             if (it !is ClosedSendChannelException) {
                 log("Internal Error: ${it.message}")
             }
         }
-    }
-
-    private suspend fun sendMessageLoop(messageSendChan: ReceiveChannel<RawMessage>) {
-        for (message in messageSendChan) {
-            sendMessage(message)
-        }
-    }
-
-    private suspend fun sendMessage(rawMessage: RawMessage) = withContext(Dispatchers.IO) {
-        writer.write(json.encodeToString(rawMessage) + "\n")
-        writer.flush()
     }
 
     private suspend fun log(message: String) = withContext(Dispatchers.IO) {
