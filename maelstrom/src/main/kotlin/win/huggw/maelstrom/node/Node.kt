@@ -131,8 +131,8 @@ class Node internal constructor(
     ) {
         val rawBody = json.encodeToJsonElement(bodyClass.serializer(), message.body)
         val rawMessage = RawMessage(
-            src = message.dest,
-            dest = message.src,
+            src = message.src,
+            dest = message.dest,
             body = rawBody,
         )
         val line = json.encodeToString(rawMessage)
