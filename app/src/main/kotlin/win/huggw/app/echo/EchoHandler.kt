@@ -13,8 +13,6 @@ class EchoHandler: Handler<EchoBody> {
         ctx: NodeContext,
         message: Message<EchoBody>
     ) {
-        ctx.log("echoing '${message.body.echo}'")
-
         ctx.push(
             message.replyTo(
                 message.body.reply(

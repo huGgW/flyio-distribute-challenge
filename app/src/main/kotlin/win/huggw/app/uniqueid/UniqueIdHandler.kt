@@ -27,8 +27,6 @@ class UniqueIdHandler: Handler<GenerateBody> {
 
         val uniqueId = "$currentMillis-$nodeId-$replyMsgId-$randHex"
 
-        ctx.log("Generate unique id: $uniqueId")
-
         ctx.push(
             message.replyTo(
                 message.body.reply(uniqueId, replyMsgId)
