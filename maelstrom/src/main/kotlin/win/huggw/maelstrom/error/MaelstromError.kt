@@ -1,6 +1,6 @@
 package win.huggw.maelstrom.error
 
-abstract class MaelstromError(
+sealed class MaelstromError(
     val code: Int,
     val name: String,
     val definite: Boolean = false,
@@ -14,6 +14,30 @@ abstract class MaelstromError(
             text,
             fromMsgId,
         )
+}
+
+abstract class CustomMaelstromError(
+    code: Int,
+    name: String,
+    definite: Boolean = false,
+    text: String? = null,
+    fromMsgId: Int? = null,
+): MaelstromError(code, name, definite, text, fromMsgId) {
+    init {
+        require(code > 100)
+    }
+}
+
+sealed class InternalMaelstromError(
+    code: Int,
+    name: String,
+    definite: Boolean = false,
+    text: String? = null,
+    fromMsgId: Int? = null,
+): MaelstromError(code, name, definite, text, fromMsgId) {
+    init {
+        require(code in 0..<100)
+    }
 }
 
 class TimeoutError(
