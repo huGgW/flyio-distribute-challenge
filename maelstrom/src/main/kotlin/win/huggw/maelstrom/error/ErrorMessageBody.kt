@@ -8,8 +8,8 @@ data class ErrorMessageBody(
     val name: String,
     val code: Int,
     val text: String? = null,
+    override val msgId: Int,
     override val inReplyTo: Int? = null,
 ) : Body {
     override val type = "error"
-    override val msgId = null
 }

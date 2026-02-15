@@ -20,6 +20,7 @@ class InitHandler (
         ctx.push(
             message.replyTo(
                 InitOkBody(
+                    msgId = ctx.nextMessageId(),
                     message.body.msgId,
                 ),
             ),

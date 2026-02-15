@@ -7,12 +7,13 @@ sealed class MaelstromError(
     val text: String? = null,
     var fromMsgId: Int? = null,
 ) : Exception("$code: ${text ?: name}") {
-    fun toErrorMessageBody() =
+    fun toErrorMessageBody(msgId: Int) =
         ErrorMessageBody(
-            name,
-            code,
-            text,
-            fromMsgId,
+            name = name,
+            code = code,
+            text = text,
+            msgId = msgId,
+            inReplyTo = fromMsgId,
         )
 }
 

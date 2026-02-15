@@ -15,6 +15,7 @@ import win.huggw.maelstrom.init.INIT_MESSAGE_TYPE
 import win.huggw.maelstrom.message.*
 import java.io.BufferedReader
 import java.io.BufferedWriter
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.reflect.KClass
 
@@ -26,6 +27,7 @@ class Node internal constructor(
     private val logger: BufferedWriter = System.err.bufferedWriter(),
 ) {
     private val id: AtomicReference<String?> = AtomicReference(null)
+    private val latestMsgId = AtomicInteger(0)
     private val messageReceiveChan = Channel<String>()
     private val messageSendChan = Channel<String>()
 
@@ -40,12 +42,10 @@ class Node internal constructor(
 
             handlerJobs.add(
                 launch {
-                    val (messageType, rawMessage) = runCatching {
-                        parseMessage(line)
-                    }.onFailure {
-                        // TODO: make error pushable
-                        log("Invalid message format: $line")
-                    }.getOrNull() ?: return@launch
+                    val (messageType, rawMessage) = runCatching { parseMessage(line) }
+                        .onSuccess { log("Received message: $line") }
+                        .onFailure {log("Invalid message format: $line") } // TODO: make error pushable
+                        .getOrNull() ?: return@launch
 
                     if (messageType != INIT_MESSAGE_TYPE && id.get() == null) {
                         pushError(
@@ -109,6 +109,7 @@ class Node internal constructor(
 
     private suspend fun sendMessageLoop() = withContext(Dispatchers.IO) {
         for (line in messageSendChan) {
+            log("Sending message: $line")
             writer.write(line + "\n")
             writer.flush()
         }
@@ -158,7 +159,7 @@ class Node internal constructor(
             }
         }
 
-        val errorBody = error.toErrorMessageBody()
+        val errorBody = error.toErrorMessageBody(nextMessageId())
         val errorMessage = rawMessage.replyTo(json.encodeToJsonElement(errorBody))
 
         val line = json.encodeToString(errorMessage)
@@ -177,6 +178,8 @@ class Node internal constructor(
         logger.flush()
     }
 
+    private fun nextMessageId() = latestMsgId.getAndAdd(1)
+
     internal fun context() = let {
         object: InternalNodeContext {
             override fun setId(id: String) {
@@ -188,16 +191,13 @@ class Node internal constructor(
             override val id: String
                 get() = it.id.get() ?: error("Node not initialized.")
 
+            override fun nextMessageId() = it.nextMessageId()
+
             override suspend fun <B: Body> push(message: Message<B>, bodyClass: KClass<B>) {
-                it.pushMessage(
-                    message,
-                    bodyClass,
-                )
+                it.pushMessage(message, bodyClass)
             }
 
-            override suspend fun log(message: String) {
-                it.log(message)
-            }
+            override suspend fun log(message: String) = it.log(message)
         }
     }
 }

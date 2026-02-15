@@ -7,6 +7,8 @@ import kotlin.reflect.KClass
 interface NodeContext {
     val id: String
 
+    fun nextMessageId(): Int
+
     suspend fun <B: Body> push(message: Message<B>, bodyClass: KClass<B>)
 
     suspend fun log(message: String)

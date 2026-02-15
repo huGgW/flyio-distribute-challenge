@@ -2,12 +2,9 @@ package win.huggw.maelstrom.init
 
 import kotlinx.serialization.Serializable
 import win.huggw.maelstrom.message.Body
-import win.huggw.maelstrom.message.Message
 import win.huggw.maelstrom.message.MessageType
 
-val INIT_MESSAGE_TYPE: MessageType = "init"
-
-typealias InitMessage = Message<InitBody>
+const val INIT_MESSAGE_TYPE: MessageType = "init"
 
 @Serializable
 data class InitBody(
