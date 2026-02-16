@@ -6,7 +6,7 @@ import kotlinx.serialization.serializerOrNull
 import win.huggw.maelstrom.message.Body
 import win.huggw.maelstrom.message.Message
 import win.huggw.maelstrom.message.RawMessage
-import win.huggw.maelstrom.node.InitNodeContext
+import win.huggw.maelstrom.node.NodeContext
 import kotlin.reflect.KClass
 import kotlin.reflect.cast
 
@@ -22,7 +22,7 @@ internal class GeneralHandler(
 
     @Throws(Error::class)
     suspend fun handle(
-        ctx: InitNodeContext,
+        ctx: NodeContext,
         rawMessage: RawMessage,
         json: Json,
     ) {

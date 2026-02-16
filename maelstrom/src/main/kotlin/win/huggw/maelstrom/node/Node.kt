@@ -1,5 +1,6 @@
 package win.huggw.maelstrom.node
 
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -28,6 +29,7 @@ import win.huggw.maelstrom.message.MessageType
 import win.huggw.maelstrom.message.RawMessage
 import java.io.BufferedReader
 import java.io.BufferedWriter
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.concurrent.atomics.AtomicInt
 import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
@@ -48,6 +50,7 @@ class Node internal constructor(
 
     private val messageReceiveChan = Channel<String>()
     private val messageSendChan = Channel<String>()
+    private val rpcHolder = ConcurrentHashMap<Int, CompletableDeferred<Message<out Body>>>()
 
     suspend fun listen() =
         coroutineScope {
@@ -58,6 +61,7 @@ class Node internal constructor(
             while (true) {
                 val line = messageReceiveChan.receiveCatching().getOrNull() ?: break
 
+                // TODO: clear done job from list
                 handlerJobs.add(
                     launch {
                         val (messageType, rawMessage) =
@@ -67,7 +71,7 @@ class Node internal constructor(
                                 .getOrNull() ?: return@launch
 
                         if (messageType != INIT_MESSAGE_TYPE && id.load() == null) {
-                            pushError(
+                            sendError(
                                 TemporarilyUnavailableError(
                                     text = "Node not initialized.",
                                 ),
@@ -79,7 +83,7 @@ class Node internal constructor(
                         val handler =
                             handlers[messageType]
                                 ?: let {
-                                    pushError(
+                                    sendError(
                                         NotSupportedError("Message type $messageType is not supported."),
                                         rawMessage,
                                     )
@@ -91,12 +95,12 @@ class Node internal constructor(
                         }.onFailure {
                             when (it) {
                                 is MaelstromError -> {
-                                    pushError(it, rawMessage)
+                                    sendError(it, rawMessage)
                                 }
 
                                 else -> {
                                     log("Handling Internal Error: ${rawMessage to it}")
-                                    pushError(
+                                    sendError(
                                         CrashError(
                                             text = "Unexpected error: ${it.message}",
                                         ),
@@ -150,7 +154,7 @@ class Node internal constructor(
     }
 
     @OptIn(InternalSerializationApi::class)
-    private suspend fun <B : Body> pushMessage(
+    private suspend fun <B : Body> sendMessage(
         message: Message<B>,
         bodyClass: KClass<B>,
     ) {
@@ -172,7 +176,7 @@ class Node internal constructor(
         }
     }
 
-    private suspend fun pushError(
+    private suspend fun sendError(
         error: MaelstromError,
         rawMessage: RawMessage,
     ) {
@@ -207,37 +211,66 @@ class Node internal constructor(
 
     private fun nextMessageId() = latestMsgId.fetchAndIncrement()
 
-    internal fun context() =
-        let {
-            object : InitNodeContext {
+    internal fun context(): NodeContext =
+        let { node ->
+            object : InitNodeContext, ResponseNodeContext {
                 override val id: String
-                    get() = it.id.load() ?: error("Node not initialized.")
+                    get() = node.id.load() ?: error("Node not initialized.")
 
                 override fun setId(id: String) {
-                    if (!it.id.compareAndSet(null, id)) {
+                    if (!node.id.compareAndSet(null, id)) {
                         error("Node ID already set.")
                     }
                 }
 
                 override val nodeIds: Set<String>
-                    get() = it.nodeIds.load() ?: error("Node IDs not initialized.")
+                    get() = node.nodeIds.load() ?: error("Node IDs not initialized.")
 
                 override fun setNodeIds(nodeIds: Set<String>) {
-                    if (!it.nodeIds.compareAndSet(null, nodeIds)) {
+                    if (!node.nodeIds.compareAndSet(null, nodeIds)) {
                         error("Node IDs already set.")
                     }
                 }
 
-                override fun nextMessageId() = it.nextMessageId()
+                override fun nextMessageId() = node.nextMessageId()
 
-                override suspend fun <B : Body> push(
+                override suspend fun <B : Body> send(
                     message: Message<B>,
                     bodyClass: KClass<B>,
                 ) {
-                    it.pushMessage(message, bodyClass)
+                    node.sendMessage(message, bodyClass)
                 }
 
-                override suspend fun log(message: String) = it.log(message)
+                override suspend fun <B : Body> rpc(
+                    message: Message<B>,
+                    bodyClass: KClass<B>,
+                ): CompletableDeferred<Message<out Body>> {
+                    val messageId = message.body.msgId.let { id -> requireNotNull(id) }
+                    val responseDeffer = CompletableDeferred<Message<out Body>>()
+                    node.rpcHolder[messageId] = responseDeffer
+
+                    node.sendMessage(message, bodyClass)
+
+                    return responseDeffer
+                }
+
+                override suspend fun receiveReply(message: Message<out Body>) {
+                    val deffer =
+                        node.rpcHolder.remove(
+                            message.body.inReplyTo.let { id -> requireNotNull(id) },
+                        )
+
+                    if (deffer == null) {
+                        node.log("Received reply for unexpected message: $message")
+                        return
+                    }
+
+                    if (!deffer.complete(message)) {
+                        node.log("Already received reply or timeout: $message")
+                    }
+                }
+
+                override suspend fun log(message: String) = node.log(message)
             }
         }
 }

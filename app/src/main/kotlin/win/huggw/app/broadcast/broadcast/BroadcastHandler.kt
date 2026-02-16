@@ -5,7 +5,7 @@ import win.huggw.maelstrom.handler.Handler
 import win.huggw.maelstrom.message.Message
 import win.huggw.maelstrom.message.MessageType
 import win.huggw.maelstrom.node.NodeContext
-import win.huggw.maelstrom.node.push
+import win.huggw.maelstrom.node.send
 
 class BroadcastHandler(
     private val repository: Repository,
@@ -99,20 +99,20 @@ class BroadcastHandler(
         nodeId: String,
         message: Message<BroadcastBody>,
     ) {
-        ctx.push(
             message.copy(
                 src = ctx.id,
                 dest = nodeId,
                 body = message.body.copy(msgId = ctx.nextMessageId()),
             ),
         )
+                ctx.rpc(
     }
 
     private suspend fun respondOk(
         ctx: NodeContext,
         message: Message<BroadcastBody>,
     ) {
-        ctx.push(
+        ctx.send(
             message.replyTo(
                 message.body.reply(ctx.nextMessageId()),
             ),

@@ -4,7 +4,7 @@ import win.huggw.maelstrom.handler.Handler
 import win.huggw.maelstrom.message.Message
 import win.huggw.maelstrom.message.MessageType
 import win.huggw.maelstrom.node.NodeContext
-import win.huggw.maelstrom.node.push
+import win.huggw.maelstrom.node.send
 import kotlin.random.Random
 import kotlin.time.Clock
 
@@ -27,7 +27,7 @@ class UniqueIdHandler : Handler<GenerateBody> {
 
         val uniqueId = "$currentMillis-$nodeId-$replyMsgId-$randHex"
 
-        ctx.push(
+        ctx.send(
             message.replyTo(
                 message.body.reply(uniqueId, replyMsgId),
             ),

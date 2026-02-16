@@ -4,7 +4,7 @@ import win.huggw.maelstrom.handler.Handler
 import win.huggw.maelstrom.message.Message
 import win.huggw.maelstrom.node.InitNodeContext
 import win.huggw.maelstrom.node.NodeContext
-import win.huggw.maelstrom.node.push
+import win.huggw.maelstrom.node.send
 
 class InitHandler : Handler<InitBody> {
     override val messageType = INIT_MESSAGE_TYPE
@@ -18,7 +18,7 @@ class InitHandler : Handler<InitBody> {
         ctx.setId(message.body.nodeId)
         ctx.setNodeIds(message.body.nodeIds.toSet())
 
-        ctx.push(
+        ctx.send(
             message.replyTo(
                 InitOkBody(
                     msgId = ctx.nextMessageId(),

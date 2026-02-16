@@ -5,7 +5,7 @@ import win.huggw.maelstrom.handler.Handler
 import win.huggw.maelstrom.message.Message
 import win.huggw.maelstrom.message.MessageType
 import win.huggw.maelstrom.node.NodeContext
-import win.huggw.maelstrom.node.push
+import win.huggw.maelstrom.node.send
 
 class ReadHandler(
     private val repository: Repository,
@@ -18,7 +18,7 @@ class ReadHandler(
     ) {
         val messages = repository.getMessages()
 
-        ctx.push(
+        ctx.send(
             message.replyTo(
                 message.body.reply(
                     msgId = ctx.nextMessageId(),

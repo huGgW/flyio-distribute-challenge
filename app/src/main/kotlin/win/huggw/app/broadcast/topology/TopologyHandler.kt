@@ -4,7 +4,7 @@ import win.huggw.app.broadcast.Repository
 import win.huggw.maelstrom.handler.Handler
 import win.huggw.maelstrom.message.Message
 import win.huggw.maelstrom.node.NodeContext
-import win.huggw.maelstrom.node.push
+import win.huggw.maelstrom.node.send
 
 class TopologyHandler(
     private val repository: Repository,
@@ -19,7 +19,7 @@ class TopologyHandler(
 
         repository.updateTopology(topology)
 
-        ctx.push(
+        ctx.send(
             message.replyTo(
                 message.body.reply(ctx.nextMessageId()),
             ),
