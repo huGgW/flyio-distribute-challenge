@@ -1,11 +1,18 @@
 package win.huggw.app.broadcast.broadcast
 
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.time.withTimeoutOrNull
 import win.huggw.app.broadcast.Repository
+import win.huggw.maelstrom.error.ERROR_MESSAGE_TYPE
 import win.huggw.maelstrom.handler.Handler
 import win.huggw.maelstrom.message.Message
 import win.huggw.maelstrom.message.MessageType
 import win.huggw.maelstrom.node.NodeContext
+import win.huggw.maelstrom.node.rpc
 import win.huggw.maelstrom.node.send
+import java.time.Duration
 
 class BroadcastHandler(
     private val repository: Repository,
@@ -30,9 +37,15 @@ class BroadcastHandler(
                 currentNode = ctx.id,
             )
 
-        sendNodeIds.forEach { propagate(ctx, it, message) }
-
         respondOk(ctx, message)
+
+        coroutineScope {
+            sendNodeIds.map {
+                launch {
+                    propagate(ctx, it, message)
+                }
+            }
+        }.joinAll()
     }
 
     private fun calculatePropagateSubjects(
@@ -99,13 +112,39 @@ class BroadcastHandler(
         nodeId: String,
         message: Message<BroadcastBody>,
     ) {
-            message.copy(
-                src = ctx.id,
-                dest = nodeId,
-                body = message.body.copy(msgId = ctx.nextMessageId()),
-            ),
-        )
+        // NOTE: currently, we assume that at some point rpc success.
+        // if it is not the case, this should be modified
+
+        while (true) {
+            val responseDeferred =
                 ctx.rpc(
+                    message.copy(
+                        src = ctx.id,
+                        dest = nodeId,
+                        body = message.body.copy(msgId = ctx.nextMessageId()),
+                    ),
+                )
+
+            val response =
+                withTimeoutOrNull(Duration.ofMillis(110)) {
+                    responseDeferred.await()
+                }
+
+            if (response == null) {
+                ctx.log("timeout on propagate to $nodeId")
+                continue
+            }
+
+            when (response.body.type) {
+                BROADCAST_OK_MESSAGE_TYPE -> break
+
+                ERROR_MESSAGE_TYPE -> ctx.log("got error on propagate: $response")
+
+                else -> throw IllegalStateException(
+                    "Unexpected message type received: $response",
+                )
+            }
+        }
     }
 
     private suspend fun respondOk(
