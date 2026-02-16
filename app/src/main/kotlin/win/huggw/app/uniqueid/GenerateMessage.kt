@@ -11,19 +11,22 @@ const val GENERATE_OK_MESSAGE_TYPE = "generate_ok"
 data class GenerateBody(
     override val msgId: Int,
     override val type: MessageType = GENERATE_MESSAGE_TYPE,
-): Body {
+) : Body {
     override val inReplyTo = null
+
     init {
         require(type == GENERATE_MESSAGE_TYPE)
     }
 
-    fun reply(uniqueId: String, msgId: Int) = GenerateOkBody(
+    fun reply(
+        uniqueId: String,
+        msgId: Int,
+    ) = GenerateOkBody(
         id = uniqueId,
         msgId = msgId,
         inReplyTo = this.msgId,
         type = GENERATE_OK_MESSAGE_TYPE,
     )
-
 }
 
 @Serializable
@@ -32,9 +35,8 @@ data class GenerateOkBody(
     override val type: MessageType = GENERATE_OK_MESSAGE_TYPE,
     override val msgId: Int,
     override val inReplyTo: Int,
-): Body {
+) : Body {
     init {
         require(type == GENERATE_OK_MESSAGE_TYPE)
     }
-
 }

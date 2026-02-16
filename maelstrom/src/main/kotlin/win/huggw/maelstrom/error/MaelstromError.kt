@@ -22,7 +22,7 @@ abstract class CustomMaelstromError(
     definite: Boolean = false,
     text: String? = null,
     fromMsgId: Int? = null,
-): MaelstromError(code, name, definite, text, fromMsgId) {
+) : MaelstromError(code, name, definite, text, fromMsgId) {
     init {
         require(code > 100)
     }
@@ -34,7 +34,7 @@ sealed class InternalMaelstromError(
     definite: Boolean = false,
     text: String? = null,
     fromMsgId: Int? = null,
-): MaelstromError(code, name, definite, text, fromMsgId) {
+) : MaelstromError(code, name, definite, text, fromMsgId) {
     init {
         require(code in 0..<100)
     }

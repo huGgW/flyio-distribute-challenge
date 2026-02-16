@@ -8,12 +8,12 @@ import win.huggw.maelstrom.node.push
 import kotlin.random.Random
 import kotlin.time.Clock
 
-class UniqueIdHandler: Handler<GenerateBody> {
+class UniqueIdHandler : Handler<GenerateBody> {
     override val messageType: MessageType = GENERATE_MESSAGE_TYPE
 
     override suspend fun handle(
         ctx: NodeContext,
-        message: Message<GenerateBody>
+        message: Message<GenerateBody>,
     ) {
         // this part will ensure generate id is unique in current nodes
         val nodeId = ctx.id
@@ -29,8 +29,8 @@ class UniqueIdHandler: Handler<GenerateBody> {
 
         ctx.push(
             message.replyTo(
-                message.body.reply(uniqueId, replyMsgId)
-            )
+                message.body.reply(uniqueId, replyMsgId),
+            ),
         )
     }
 }

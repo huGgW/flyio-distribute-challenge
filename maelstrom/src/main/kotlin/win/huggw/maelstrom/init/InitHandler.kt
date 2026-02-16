@@ -6,11 +6,13 @@ import win.huggw.maelstrom.node.InitNodeContext
 import win.huggw.maelstrom.node.NodeContext
 import win.huggw.maelstrom.node.push
 
-class InitHandler (
-): Handler<InitBody> {
+class InitHandler : Handler<InitBody> {
     override val messageType = INIT_MESSAGE_TYPE
 
-    override suspend fun handle(ctx: NodeContext, message: Message<InitBody>) {
+    override suspend fun handle(
+        ctx: NodeContext,
+        message: Message<InitBody>,
+    ) {
         require(ctx is InitNodeContext)
 
         ctx.setId(message.body.nodeId)

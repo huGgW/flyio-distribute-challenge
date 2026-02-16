@@ -12,18 +12,19 @@ data class EchoBody(
     val echo: String,
     override val msgId: Int,
     override val type: MessageType = ECHO_MESSAGE_TYPE,
-): Body {
+) : Body {
     override val inReplyTo = null
 
     init {
         require(type == ECHO_MESSAGE_TYPE)
     }
 
-    fun reply(msgId: Int) = EchoOkBody(
-        echo = echo,
-        msgId = msgId,
-        inReplyTo = this.msgId,
-    )
+    fun reply(msgId: Int) =
+        EchoOkBody(
+            echo = echo,
+            msgId = msgId,
+            inReplyTo = this.msgId,
+        )
 }
 
 @Serializable
@@ -32,7 +33,7 @@ data class EchoOkBody(
     override val msgId: Int,
     override val inReplyTo: Int,
     override val type: MessageType = ECHO_OK_MESSAGE_TYPE,
-): Body {
+) : Body {
     init {
         require(type == ECHO_OK_MESSAGE_TYPE)
     }

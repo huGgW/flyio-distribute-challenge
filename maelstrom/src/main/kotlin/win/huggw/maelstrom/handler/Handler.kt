@@ -10,5 +10,8 @@ interface Handler<B : Body> {
     val messageType: MessageType
 
     @Throws(MaelstromError::class)
-    suspend fun handle(ctx: NodeContext, message: Message<B>)
+    suspend fun handle(
+        ctx: NodeContext,
+        message: Message<B>,
+    )
 }
