@@ -50,12 +50,14 @@ class Node internal constructor(
 
     private val messageReceiveChan = Channel<String>()
     private val messageSendChan = Channel<String>()
+    private val logChan = Channel<String>()
     private val rpcHolder = ConcurrentHashMap<Int, CompletableDeferred<Message<out Body>>>()
 
     suspend fun listen() =
         coroutineScope {
             val receiveMessageJob = launch { receiveMessageLoop() }
             val sendMessageJob = launch { sendMessageLoop() }
+            val logJob = launch { logLoop() }
 
             val handlerJobs = mutableListOf<Job>()
             while (true) {
@@ -117,6 +119,7 @@ class Node internal constructor(
                 .apply {
                     add(receiveMessageJob)
                     add(sendMessageJob)
+                    add(logJob)
                 }.joinAll()
         }
 
@@ -141,6 +144,14 @@ class Node internal constructor(
                 log("Sending message: $line")
                 writer.write(line + "\n")
                 writer.flush()
+            }
+        }
+
+    private suspend fun logLoop() =
+        withContext(Dispatchers.IO) {
+            for (message in logChan) {
+                logger.write("$message\n")
+                logger.flush()
             }
         }
 
@@ -203,11 +214,11 @@ class Node internal constructor(
         }
     }
 
-    private suspend fun log(message: String) =
-        withContext(Dispatchers.IO) {
-            logger.write("$message\n")
-            logger.flush()
+    private suspend fun log(message: String) {
+        runCatching {
+            logChan.send(message)
         }
+    }
 
     private fun nextMessageId() = latestMsgId.fetchAndIncrement()
 
