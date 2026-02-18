@@ -222,66 +222,67 @@ class Node internal constructor(
 
     private fun nextMessageId() = latestMsgId.fetchAndIncrement()
 
+    private suspend fun <B : Body> rpc(
+        message: Message<B>,
+        bodyClass: KClass<B>,
+    ): CompletableDeferred<Message<out Body>> {
+        val messageId = message.body.msgId.let { id -> requireNotNull(id) }
+        val responseDeffer = CompletableDeferred<Message<out Body>>()
+        rpcHolder[messageId] = responseDeffer
+        sendMessage(message, bodyClass)
+        return responseDeffer
+    }
+
+    private suspend fun receiveReply(message: Message<out Body>) {
+        val deffer =
+            rpcHolder.remove(
+                message.body.inReplyTo.let { id -> requireNotNull(id) },
+            )
+
+        if (deffer == null) {
+            log("Received reply for unexpected message: $message")
+            return
+        }
+
+        if (!deffer.complete(message)) {
+            log("Already received reply or timeout: $message")
+        }
+    }
+
     internal fun context(): NodeContext =
-        let { node ->
-            object : InitNodeContext, ResponseNodeContext {
-                override val id: String
-                    get() = node.id.load() ?: error("Node not initialized.")
+        object : NodeContext, InitNodeContext, ResponseNodeContext {
+            override val id: String
+                get() = this@Node.id.load() ?: error("Node not initialized.")
 
-                override fun setId(id: String) {
-                    if (!node.id.compareAndSet(null, id)) {
-                        error("Node ID already set.")
-                    }
+            override fun setId(id: String) {
+                if (!this@Node.id.compareAndSet(null, id)) {
+                    error("Node ID already set.")
                 }
-
-                override val nodeIds: Set<String>
-                    get() = node.nodeIds.load() ?: error("Node IDs not initialized.")
-
-                override fun setNodeIds(nodeIds: Set<String>) {
-                    if (!node.nodeIds.compareAndSet(null, nodeIds)) {
-                        error("Node IDs already set.")
-                    }
-                }
-
-                override fun nextMessageId() = node.nextMessageId()
-
-                override suspend fun <B : Body> send(
-                    message: Message<B>,
-                    bodyClass: KClass<B>,
-                ) {
-                    node.sendMessage(message, bodyClass)
-                }
-
-                override suspend fun <B : Body> rpc(
-                    message: Message<B>,
-                    bodyClass: KClass<B>,
-                ): CompletableDeferred<Message<out Body>> {
-                    val messageId = message.body.msgId.let { id -> requireNotNull(id) }
-                    val responseDeffer = CompletableDeferred<Message<out Body>>()
-                    node.rpcHolder[messageId] = responseDeffer
-
-                    node.sendMessage(message, bodyClass)
-
-                    return responseDeffer
-                }
-
-                override suspend fun receiveReply(message: Message<out Body>) {
-                    val deffer =
-                        node.rpcHolder.remove(
-                            message.body.inReplyTo.let { id -> requireNotNull(id) },
-                        )
-
-                    if (deffer == null) {
-                        node.log("Received reply for unexpected message: $message")
-                        return
-                    }
-
-                    if (!deffer.complete(message)) {
-                        node.log("Already received reply or timeout: $message")
-                    }
-                }
-
-                override suspend fun log(message: String) = node.log(message)
             }
+
+            override val nodeIds: Set<String>
+                get() = this@Node.nodeIds.load() ?: error("Node IDs not initialized.")
+
+            override fun setNodeIds(nodeIds: Set<String>) {
+                if (!this@Node.nodeIds.compareAndSet(null, nodeIds)) {
+                    error("Node IDs already set.")
+                }
+            }
+
+            override fun nextMessageId() = this@Node.nextMessageId()
+
+            override suspend fun <B : Body> send(
+                message: Message<B>,
+                bodyClass: KClass<B>,
+            ) = this@Node.sendMessage(message, bodyClass)
+
+            override suspend fun <B : Body> rpc(
+                message: Message<B>,
+                bodyClass: KClass<B>,
+            ): CompletableDeferred<Message<out Body>> = this@Node.rpc(message, bodyClass)
+
+            override suspend fun receiveReply(message: Message<out Body>) = this@Node.receiveReply(message)
+
+            override suspend fun log(message: String) = this@Node.log(message)
         }
 }
