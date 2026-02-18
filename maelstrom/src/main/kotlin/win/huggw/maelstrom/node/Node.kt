@@ -8,6 +8,7 @@ import kotlinx.coroutines.channels.ClosedSendChannelException
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.InternalSerializationApi
 import kotlinx.serialization.json.Json
@@ -53,75 +54,71 @@ class Node internal constructor(
     private val logChan = Channel<String>()
     private val rpcHolder = ConcurrentHashMap<Int, CompletableDeferred<Message<out Body>>>()
 
-    suspend fun listen() =
+    suspend fun listen() {
         coroutineScope {
-            val receiveMessageJob = launch { receiveMessageLoop() }
-            val sendMessageJob = launch { sendMessageLoop() }
-            val logJob = launch { logLoop() }
+            // execute io loops
+            launch { receiveMessageLoop() }
+            launch { sendMessageLoop() }
+            launch { logLoop() }
 
-            val handlerJobs = mutableListOf<Job>()
-            while (true) {
-                val line = messageReceiveChan.receiveCatching().getOrNull() ?: break
-
-                // TODO: clear done job from list
-                handlerJobs.add(
-                    launch {
-                        val (messageType, rawMessage) =
-                            runCatching { parseMessage(line) }
-                                .onSuccess { log("Received message: $line") }
-                                .onFailure { log("Invalid message format: $line") } // TODO: make error pushable
-                                .getOrNull() ?: return@launch
-
-                        if (messageType != INIT_MESSAGE_TYPE && id.load() == null) {
-                            sendError(
-                                TemporarilyUnavailableError(
-                                    text = "Node not initialized.",
-                                ),
-                                rawMessage,
-                            )
-                            return@launch
-                        }
-
-                        val handler =
-                            handlers[messageType]
-                                ?: let {
-                                    sendError(
-                                        NotSupportedError("Message type $messageType is not supported."),
-                                        rawMessage,
-                                    )
-                                    return@launch
-                                }
-
-                        runCatching {
-                            handler.handle(context(), rawMessage, json)
-                        }.onFailure {
-                            when (it) {
-                                is MaelstromError -> {
-                                    sendError(it, rawMessage)
-                                }
-
-                                else -> {
-                                    log("Handling Internal Error: ${rawMessage to it}")
-                                    sendError(
-                                        CrashError(
-                                            text = "Unexpected error: ${it.message}",
-                                        ),
-                                        rawMessage,
-                                    )
-                                }
-                            }
-                        }
-                    },
-                )
+            // run handlers async inside supervisorScope,
+            // so each handler does not cancel other handlers
+            supervisorScope {
+                while (true) {
+                    val line = messageReceiveChan.receiveCatching().getOrNull() ?: break
+                    launch { handle(line) }
+                }
             }
-
-            handlerJobs
-                .apply {
-                    add(receiveMessageJob)
-                    add(sendMessageJob)
-                    add(logJob)
-                }.joinAll()
         }
+    }
+
+    private suspend fun handle(line: String) {
+        val (messageType, rawMessage) =
+            runCatching { parseMessage(line) }
+                .onSuccess { log("Received message: $line") }
+                .onFailure { log("Invalid message format: $line") } // TODO: make error pushable
+                .getOrNull() ?: return
+
+        if (messageType != INIT_MESSAGE_TYPE && id.load() == null) {
+            sendError(
+                TemporarilyUnavailableError(
+                    text = "Node not initialized.",
+                ),
+                rawMessage,
+            )
+            return
+        }
+
+        val handler =
+            handlers[messageType]
+                ?: let {
+                    sendError(
+                        NotSupportedError("Message type $messageType is not supported."),
+                        rawMessage,
+                    )
+                    return
+                }
+
+        runCatching {
+            handler.handle(context(), rawMessage, json)
+        }.onFailure {
+            when (it) {
+                is MaelstromError -> {
+                    sendError(it, rawMessage)
+                }
+
+                else -> {
+                    log("Handling Internal Error: ${rawMessage to it}")
+                    sendError(
+                        CrashError(
+                            text = "Unexpected error: ${it.message}",
+                        ),
+                        rawMessage,
+                    )
+                }
+            }
+        }
+    }
 
     private suspend fun receiveMessageLoop() =
         withContext(Dispatchers.IO) {
