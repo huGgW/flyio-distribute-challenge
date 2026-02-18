@@ -8,7 +8,7 @@ import kotlin.concurrent.write
 
 @OptIn(ExperimentalAtomicApi::class)
 class Repository {
-    private val messages = hashSetOf<Int>()
+    private val messages = mutableSetOf<Int>()
     private val messageLocker = ReentrantReadWriteLock()
     private val topology = AtomicReference<Map<String, Set<String>>>(emptyMap())
 
@@ -29,7 +29,14 @@ class Repository {
         }
     }
 
-    fun getMessages(): List<Int> = messageLocker.read { messages.toList() }
+    fun addMessages(messages: Collection<Int>): Set<Int> {
+        messageLocker.write {
+            this.messages.addAll(messages)
+            return this.messages.toSet()
+        }
+    }
+
+    fun getMessages() = messageLocker.read { messages.toSet() }
 
     fun updateTopology(topology: Map<String, Set<String>>) {
         this.topology.store(topology)

@@ -11,7 +11,7 @@ const val BROADCAST_OK_MESSAGE_TYPE = "broadcast_ok"
 data class BroadcastBody(
     val message: Int,
     override val type: MessageType = BROADCAST_MESSAGE_TYPE,
-    override val msgId: Int,
+    override val msgId: Int? = null,
 ) : Body {
     override val inReplyTo = null
 
@@ -19,7 +19,7 @@ data class BroadcastBody(
         require(type == BROADCAST_MESSAGE_TYPE)
     }
 
-    fun reply(msgId: Int) = BroadcastOkBody(msgId, this.msgId)
+    fun reply(msgId: Int) = BroadcastOkBody(msgId, requireNotNull(this.msgId))
 }
 
 @Serializable

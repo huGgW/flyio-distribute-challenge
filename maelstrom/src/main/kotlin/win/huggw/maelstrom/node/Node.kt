@@ -2,11 +2,9 @@ package win.huggw.maelstrom.node
 
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ClosedSendChannelException
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
@@ -246,7 +244,7 @@ class Node internal constructor(
         }
     }
 
-    internal fun context(): NodeContext =
+    fun context(): NodeContext =
         object : NodeContext, InitNodeContext, ResponseNodeContext {
             override val id: String
                 get() = this@Node.id.load() ?: error("Node not initialized.")

@@ -1,21 +1,17 @@
 package win.huggw.app.broadcast.broadcast
 
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.time.withTimeoutOrNull
+import kotlinx.coroutines.supervisorScope
 import win.huggw.app.broadcast.Repository
-import win.huggw.maelstrom.error.ERROR_MESSAGE_TYPE
 import win.huggw.maelstrom.handler.Handler
 import win.huggw.maelstrom.message.Message
 import win.huggw.maelstrom.message.MessageType
 import win.huggw.maelstrom.node.NodeContext
-import win.huggw.maelstrom.node.rpc
 import win.huggw.maelstrom.node.send
-import java.time.Duration
 
 class BroadcastHandler(
     private val repository: Repository,
+    private val ignoreTopology: Boolean = false,
 ) : Handler<BroadcastBody> {
     override val messageType: MessageType = BROADCAST_MESSAGE_TYPE
 
@@ -24,6 +20,7 @@ class BroadcastHandler(
         message: Message<BroadcastBody>,
     ) {
         val broadcastedMessage = message.body.message
+
         if (!repository.addMessage(broadcastedMessage)) {
             respondOk(ctx, message)
             return
@@ -36,16 +33,17 @@ class BroadcastHandler(
                 messageSrc = message.src,
                 currentNode = ctx.id,
             )
+        ctx.log("propagate from ${ctx.id} to $sendNodeIds")
 
-        respondOk(ctx, message)
-
-        coroutineScope {
-            sendNodeIds.map {
+        supervisorScope {
+            sendNodeIds.forEach {
                 launch {
                     propagate(ctx, it, message)
                 }
             }
-        }.joinAll()
+
+            respondOk(ctx, message)
+        }
     }
 
     private fun calculatePropagateSubjects(
@@ -54,18 +52,30 @@ class BroadcastHandler(
         messageSrc: String,
         currentNode: String,
     ): Set<String> {
-        val coveredNodeIds = mutableSetOf<String>(currentNode)
+        val isSrcNode = messageSrc in nodeIds
+
+        // if ignore topology, send message to all nodes if message got from client
+        if (ignoreTopology) {
+            return if (isSrcNode) {
+                emptySet()
+            } else {
+                nodeIds - currentNode
+            }
+        }
+
+        val coveredNodeIds = mutableSetOf(currentNode)
         val sendNodeIds = mutableSetOf<String>()
 
         // if message is from a node, neighbors of that node is already covered
-        if (messageSrc in nodeIds) {
+        if (isSrcNode) {
             coveredNodeIds.add(messageSrc)
-            traverseAndCover(topology, messageSrc, coveredNodeIds)
+            coveredNodeIds.addAll(topology[messageSrc] ?: emptySet())
         }
 
         // send neighbor node first, and message should be covered by topology
-        if (currentNode in topology && topology[currentNode]!!.isNotEmpty()) {
-            val toSendNeighbors = topology[currentNode]!! - coveredNodeIds
+        val neighbors = topology[currentNode] ?: emptySet()
+        if (neighbors.isNotEmpty()) {
+            val toSendNeighbors = neighbors - coveredNodeIds
 
             coveredNodeIds.addAll(toSendNeighbors)
             sendNodeIds.addAll(toSendNeighbors)
@@ -86,7 +96,7 @@ class BroadcastHandler(
         from: String,
         covered: MutableSet<String>,
     ) {
-        if (from !in topology || topology[from]!!.isNotEmpty()) {
+        if (from !in topology || topology[from]!!.isEmpty()) {
             return
         }
 
@@ -112,45 +122,23 @@ class BroadcastHandler(
         nodeId: String,
         message: Message<BroadcastBody>,
     ) {
-        // NOTE: currently, we assume that at some point rpc success.
-        // if it is not the case, this should be modified
-
-        while (true) {
-            val responseDeferred =
-                ctx.rpc(
-                    message.copy(
-                        src = ctx.id,
-                        dest = nodeId,
-                        body = message.body.copy(msgId = ctx.nextMessageId()),
-                    ),
-                )
-
-            val response =
-                withTimeoutOrNull(Duration.ofMillis(110)) {
-                    responseDeferred.await()
-                }
-
-            if (response == null) {
-                ctx.log("timeout on propagate to $nodeId")
-                continue
-            }
-
-            when (response.body.type) {
-                BROADCAST_OK_MESSAGE_TYPE -> break
-
-                ERROR_MESSAGE_TYPE -> ctx.log("got error on propagate: $response")
-
-                else -> throw IllegalStateException(
-                    "Unexpected message type received: $response",
-                )
-            }
-        }
+        ctx.send(
+            message.copy(
+                src = ctx.id,
+                dest = nodeId,
+                body = message.body.copy(msgId = null),
+            ),
+        )
     }
 
     private suspend fun respondOk(
         ctx: NodeContext,
         message: Message<BroadcastBody>,
     ) {
+        if (message.body.msgId == null) {
+            return
+        }
+
         ctx.send(
             message.replyTo(
                 message.body.reply(ctx.nextMessageId()),

@@ -1,5 +1,8 @@
 package win.huggw.app
 
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.supervisorScope
+import win.huggw.app.broadcast.Poller
 import win.huggw.app.broadcast.Repository
 import win.huggw.app.broadcast.broadcast.BROADCAST_OK_MESSAGE_TYPE
 import win.huggw.app.broadcast.broadcast.BroadcastHandler
@@ -29,7 +32,12 @@ suspend fun main() {
             addHandler(UniqueIdHandler())
             addResponse<GenerateOkBody>(GENERATE_OK_MESSAGE_TYPE)
 
-            addHandler(BroadcastHandler(repository))
+            addHandler(
+                BroadcastHandler(
+                    repository = repository,
+                    ignoreTopology = false,
+                ),
+            )
             addResponse<BroadcastOkBody>(BROADCAST_OK_MESSAGE_TYPE)
 
             addHandler(TopologyHandler(repository))
@@ -39,5 +47,14 @@ suspend fun main() {
             addResponse<ReadOkBody>(READ_OK_MESSAGE_TYPE)
         }
 
-    node.listen()
+    val poller =
+        Poller(
+            repository = repository,
+            ctx = node.context(),
+        )
+
+    supervisorScope {
+        launch { node.listen() }
+        launch { poller.loop() }
+    }
 }

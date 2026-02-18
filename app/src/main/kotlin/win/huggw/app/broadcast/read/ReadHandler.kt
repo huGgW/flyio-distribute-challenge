@@ -22,7 +22,7 @@ class ReadHandler(
             message.replyTo(
                 message.body.reply(
                     msgId = ctx.nextMessageId(),
-                    messages = messages,
+                    messages = messages.toList(),
                 ),
             ),
         )
