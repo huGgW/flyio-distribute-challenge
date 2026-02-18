@@ -49,9 +49,9 @@ class Node internal constructor(
     private val nodeIds = AtomicReference<Set<String>?>(null)
     private val latestMsgId = AtomicInt(0)
 
-    private val messageReceiveChan = Channel<String>()
-    private val messageSendChan = Channel<String>()
-    private val logChan = Channel<String>()
+    private val messageReceiveChan = Channel<String>(capacity = Channel.UNLIMITED)
+    private val messageSendChan = Channel<String>(capacity = Channel.UNLIMITED)
+    private val logChan = Channel<String>(capacity = Channel.UNLIMITED)
     private val rpcHolder = ConcurrentHashMap<Int, CompletableDeferred<Message<out Body>>>()
 
     suspend fun listen() {
