@@ -69,7 +69,6 @@ class BroadcastHandler(
         // if message is from a node, neighbors of that node is already covered
         if (isSrcNode) {
             coveredNodeIds.add(messageSrc)
-            coveredNodeIds.addAll(topology[messageSrc] ?: emptySet())
         }
 
         // send neighbor node first, and message should be covered by topology

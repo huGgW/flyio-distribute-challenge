@@ -20,6 +20,7 @@ import win.huggw.app.uniqueid.GENERATE_OK_MESSAGE_TYPE
 import win.huggw.app.uniqueid.GenerateOkBody
 import win.huggw.app.uniqueid.UniqueIdHandler
 import win.huggw.maelstrom.node.Node
+import java.time.Duration
 
 suspend fun main() {
     val repository = Repository()
@@ -35,7 +36,7 @@ suspend fun main() {
             addHandler(
                 BroadcastHandler(
                     repository = repository,
-                    ignoreTopology = false,
+                    ignoreTopology = false, // ignore topology for mininum operation per message
                 ),
             )
             addResponse<BroadcastOkBody>(BROADCAST_OK_MESSAGE_TYPE)
@@ -51,6 +52,8 @@ suspend fun main() {
         Poller(
             repository = repository,
             ctx = node.context(),
+            minBackoff = Duration.ofSeconds(1),
+            maxBackoff = Duration.ofSeconds(2),
         )
 
     supervisorScope {
