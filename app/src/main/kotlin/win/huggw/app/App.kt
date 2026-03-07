@@ -20,6 +20,7 @@ import win.huggw.app.uniqueid.GENERATE_OK_MESSAGE_TYPE
 import win.huggw.app.uniqueid.GenerateOkBody
 import win.huggw.app.uniqueid.UniqueIdHandler
 import win.huggw.maelstrom.node.Node
+import win.huggw.maelstrom.node.NodeBuilder
 import java.time.Duration
 
 suspend fun main() {
@@ -27,25 +28,9 @@ suspend fun main() {
 
     val node =
         Node {
-            addHandler(EchoHandler())
-            addResponse<EchoOkBody>(ECHO_OK_MESSAGE_TYPE)
-
-            addHandler(UniqueIdHandler())
-            addResponse<GenerateOkBody>(GENERATE_OK_MESSAGE_TYPE)
-
-            addHandler(
-                BroadcastHandler(
-                    repository = repository,
-                    ignoreTopology = false, // ignore topology for mininum operation per message
-                ),
-            )
-            addResponse<BroadcastOkBody>(BROADCAST_OK_MESSAGE_TYPE)
-
-            addHandler(TopologyHandler(repository))
-            addResponse<TopologyOkBody>(TOPOLOGY_OK_MESSAGE_TYPE)
-
-            addHandler(ReadHandler(repository))
-            addResponse<ReadOkBody>(READ_OK_MESSAGE_TYPE)
+            registerEchoHandlers()
+            registerUniqueIdHandlers()
+            registerBroadcastHandlers(repository)
         }
 
     val poller =
@@ -60,4 +45,30 @@ suspend fun main() {
         launch { node.listen() }
         launch { poller.loop() }
     }
+}
+
+private fun NodeBuilder.registerEchoHandlers() {
+    addHandler(EchoHandler())
+    addResponse<EchoOkBody>(ECHO_OK_MESSAGE_TYPE)
+}
+
+private fun NodeBuilder.registerUniqueIdHandlers() {
+    addHandler(UniqueIdHandler())
+    addResponse<GenerateOkBody>(GENERATE_OK_MESSAGE_TYPE)
+}
+
+private fun NodeBuilder.registerBroadcastHandlers(repository: Repository) {
+    addHandler(
+        BroadcastHandler(
+            repository = repository,
+            ignoreTopology = false, // ignore topology for mininum operation per message
+        ),
+    )
+    addResponse<BroadcastOkBody>(BROADCAST_OK_MESSAGE_TYPE)
+
+    addHandler(TopologyHandler(repository))
+    addResponse<TopologyOkBody>(TOPOLOGY_OK_MESSAGE_TYPE)
+
+    addHandler(ReadHandler(repository))
+    addResponse<ReadOkBody>(READ_OK_MESSAGE_TYPE)
 }
