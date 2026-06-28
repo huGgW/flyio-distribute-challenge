@@ -15,17 +15,17 @@ class UniqueIdHandler : Handler<GenerateBody> {
         ctx: NodeContext,
         message: Message<GenerateBody>,
     ) {
-        // this part will ensure generate id is unique in current nodes
-        val nodeId = ctx.id
+        // val nodeId = ctx.id
+        //
+        // // this part will ensure generate id will defer from past node which has same node id
+        // val currentMillis = Clock.System.now().toEpochMilliseconds()
+        //
+        // // this part add randomness for just in case
+        // val randHex = Random.nextInt().toString(16)
+        //
+
         val replyMsgId = ctx.nextMessageId()
-
-        // this part will ensure generate id will defer from past node which has same node id
-        val currentMillis = Clock.System.now().toEpochMilliseconds()
-
-        // this part add randomness for just in case
-        val randHex = Random.nextInt().toString(16)
-
-        val uniqueId = "$currentMillis-$nodeId-$replyMsgId-$randHex"
+        val uniqueId = generate(ctx.id, replyMsgId)
 
         ctx.send(
             message.replyTo(
